@@ -1,7 +1,7 @@
-// Signup.js
 import { useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "./firebase";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "./firebase";
 
 function Signup() {
   const [email, setEmail] = useState("");
@@ -9,7 +9,14 @@ function Signup() {
 
   const handleSignup = async () => {
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // ✅ Save user email & UID to Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        email: user.email,
+        createdAt: new Date(),
+      });
     } catch (error) {
       alert(error.message);
     }

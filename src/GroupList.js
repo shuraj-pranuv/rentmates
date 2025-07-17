@@ -31,14 +31,22 @@ const GroupList = ({ onSelectGroup }) => {
           const data = docSnap.data();
           const members = data.members || [];
 
-          const memberEmails = await Promise.all(
+          const memberDetails = await Promise.all(
             members.map(async (uid) => {
               try {
                 const userDoc = await getDoc(doc(db, "users", uid));
-                return userDoc.exists() ? userDoc.data().email : "Unknown";
+                if (userDoc.exists()) {
+                  const { displayName, email } = userDoc.data();
+                  return {
+                    name: displayName || "Unknown",
+                    email,
+                  };
+                } else {
+                  return { name: "Unknown", email: "?" };
+                }
               } catch (err) {
                 console.error("Error fetching user:", err);
-                return "Error";
+                return { name: "Error", email: "?" };
               }
             })
           );
@@ -46,7 +54,7 @@ const GroupList = ({ onSelectGroup }) => {
           return {
             id: docSnap.id,
             groupName: data.groupName,
-            memberEmails,
+            members: memberDetails,
             createdBy: data.createdBy,
           };
         })
@@ -60,7 +68,9 @@ const GroupList = ({ onSelectGroup }) => {
   }, []);
 
   const handleDelete = async (groupId) => {
-    const confirmDelete = window.confirm("Are you sure you want to delete this group?");
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this group?"
+    );
     if (!confirmDelete) return;
 
     try {
@@ -79,11 +89,15 @@ const GroupList = ({ onSelectGroup }) => {
       {loading ? (
         <p className="text-sm text-gray-400">Loading groups...</p>
       ) : groups.length === 0 ? (
-        <p className="text-sm text-gray-500">No groups found. Create one or get invited.</p>
+        <p className="text-sm text-gray-500">
+          No groups found. Create one or get invited.
+        </p>
       ) : (
         groups.map((group, groupIdx) => (
-          <div key={group.id} className="bg-indigo-100 p-3 rounded-lg shadow-sm">
-            {/* Group name click handler */}
+          <div
+            key={group.id}
+            className="bg-indigo-100 p-3 rounded-lg shadow-sm"
+          >
             <button
               className="text-indigo-900 font-semibold hover:underline"
               onClick={() => onSelectGroup(group.id)}
@@ -91,10 +105,15 @@ const GroupList = ({ onSelectGroup }) => {
               {group.groupName}
             </button>
 
-            {/* Avatars row */}
-            <div className="flex flex-wrap items-center gap-1 mt-2">
-              {group.memberEmails.map((email, i) => (
-                <Avatar key={i} email={email} index={i + groupIdx} />
+            {/* Avatars + Names */}
+            <div className="flex flex-wrap items-center gap-3 mt-2">
+              {group.members.map((member, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <Avatar email={member.email} index={i + groupIdx} />
+                  <span className="text-[10px] text-gray-700">
+                    {member.name}
+                  </span>
+                </div>
               ))}
             </div>
 

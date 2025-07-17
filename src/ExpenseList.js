@@ -1,269 +1,130 @@
-import { useState, useEffect } from "react";
-import { db, auth } from "./firebase";
+import { useEffect, useState } from "react";
+import { db } from "./firebase";
 import {
   collection,
-  onSnapshot,
   query,
   orderBy,
+  onSnapshot,
+  getDoc,
   doc,
   deleteDoc,
-  getDoc,
-  updateDoc,
 } from "firebase/firestore";
+import { auth } from "./firebase";
+import Avatar from "./components/ui/Avatar"; // ✅ avatar still uses email hash
 
-function ExpenseList({ groupId }) {
+export default function ExpenseList({ groupId }) {
   const [expenses, setExpenses] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [editing, setEditing] = useState(null); // holds the expense being edited
-
-  const [filterUser, setFilterUser] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
-  const [filterDateFrom, setFilterDateFrom] = useState("");
-  const [filterDateTo, setFilterDateTo] = useState("");
+  const [userMap, setUserMap] = useState({}); // uid → displayName
 
   useEffect(() => {
-    if (!groupId) return;
+    const fetchUsers = async () => {
+      const nameMap = {};
+      const groupRef = await getDoc(doc(db, "groups", groupId));
+      const uids = groupRef.data()?.members || [];
 
+      await Promise.all(
+        uids.map(async (uid) => {
+          const snap = await getDoc(doc(db, "users", uid));
+          if (snap.exists()) {
+            const { displayName, email } = snap.data();
+            nameMap[uid] = { name: displayName || "Unknown", email };
+          }
+        })
+      );
+
+      setUserMap(nameMap);
+    };
+
+    fetchUsers();
+  }, [groupId]);
+
+  useEffect(() => {
     const q = query(
       collection(db, "groups", groupId, "expenses"),
       orderBy("createdAt", "desc")
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const enriched = await Promise.all(
-        snapshot.docs.map(async (docSnap) => {
-          const data = docSnap.data();
-          const userSnap = await getDoc(doc(db, "users", data.createdBy));
-          const email = userSnap.exists() ? userSnap.data().email : "Unknown";
-
-          const sharedWithEmails = await Promise.all(
-            (data.sharedWith || []).map(async (uid) => {
-              const userSnap = await getDoc(doc(db, "users", uid));
-              return userSnap.exists() ? userSnap.data().email : uid;
-            })
-          );
-
-          return {
-            id: docSnap.id,
-            ...data,
-            email,
-            expenseDate: data.expenseDate?.toDate?.() || null,
-            sharedWithEmails,
-          };
-        })
-      );
-
-      setExpenses(enriched);
-      setFiltered(enriched);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setExpenses(list);
     });
 
     return () => unsubscribe();
   }, [groupId]);
 
-  useEffect(() => {
-    let result = [...expenses];
-    if (filterUser.trim()) {
-      result = result.filter((exp) =>
-        exp.email.toLowerCase().includes(filterUser.toLowerCase())
-      );
-    }
-    if (filterCategory.trim()) {
-      result = result.filter(
-        (exp) =>
-          exp.category?.toLowerCase() === filterCategory.toLowerCase()
-      );
-    }
-    if (filterDateFrom) {
-      const from = new Date(filterDateFrom);
-      result = result.filter((exp) => exp.expenseDate >= from);
-    }
-    if (filterDateTo) {
-      const to = new Date(filterDateTo);
-      result = result.filter((exp) => exp.expenseDate <= to);
-    }
-    setFiltered(result);
-  }, [filterUser, filterCategory, filterDateFrom, filterDateTo, expenses]);
-
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this expense?")) {
-      await deleteDoc(doc(db, "groups", groupId, "expenses", id));
-    }
-  };
-
-  const handleEdit = (exp) => {
-    setEditing({ ...exp }); // open modal
-  };
-
-  const handleEditChange = (field, value) => {
-    setEditing((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const saveEditedExpense = async () => {
-    if (!editing.description || !editing.amount) return alert("Fields can't be empty");
-
-    const ref = doc(db, "groups", groupId, "expenses", editing.id);
-    const payload = {
-      description: editing.description,
-      amount: parseFloat(editing.amount),
-      note: editing.note || "",
-      category: editing.category || "",
-    };
-
-    await updateDoc(ref, payload);
-    setEditing(null);
+    if (!window.confirm("Delete this expense?")) return;
+    await deleteDoc(doc(db, "groups", groupId, "expenses", id));
   };
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-bold text-indigo-700">Expenses</h2>
+      {expenses.length === 0 && (
+        <p className="text-gray-500 text-sm">No expenses yet.</p>
+      )}
 
-      {/* 🔍 Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-        <input
-          type="text"
-          placeholder="Filter by user email"
-          value={filterUser}
-          onChange={(e) => setFilterUser(e.target.value)}
-          className="border p-2 rounded text-sm"
-        />
-        <input
-          type="text"
-          placeholder="Filter by category"
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          className="border p-2 rounded text-sm"
-        />
-        <input
-          type="date"
-          value={filterDateFrom}
-          onChange={(e) => setFilterDateFrom(e.target.value)}
-          className="border p-2 rounded text-sm"
-        />
-        <input
-          type="date"
-          value={filterDateTo}
-          onChange={(e) => setFilterDateTo(e.target.value)}
-          className="border p-2 rounded text-sm"
-        />
-      </div>
+      {expenses.map((exp, idx) => (
+        <div
+          key={exp.id}
+          className="bg-white border border-gray-200 p-4 rounded-lg shadow flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+        >
+          {/* 📄 Expense Details */}
+          <div className="flex-1">
+            <p className="text-md font-semibold text-gray-800">
+              {exp.description}
+            </p>
+            <p className="text-sm text-gray-600 mt-1">₹ {exp.amount}</p>
+            {exp.expenseDate && (
+              <p className="text-xs text-gray-400">
+                {exp.expenseDate.toDate().toLocaleDateString()}
+              </p>
+            )}
+          </div>
 
-      {/* 📋 Expenses */}
-      {filtered.length === 0 ? (
-        <p className="text-gray-500 text-sm">No expenses found.</p>
-      ) : (
-        filtered.map((exp) => (
-          <div
-            key={exp.id}
-            className="border p-3 rounded bg-white shadow-sm space-y-1"
-          >
-            <div className="flex justify-between items-center">
-              <span className="font-semibold text-gray-800">
-                {exp.description}
-              </span>
-              <span className="text-green-700 font-bold">₹{exp.amount}</span>
-            </div>
+          {/* 🙋 Paid by */}
+          <div className="flex flex-col items-center">
+            <span className="text-xs text-gray-500">Paid by</span>
+            <Avatar
+              email={userMap[exp.createdBy]?.email || "?"}
+              index={idx}
+            />
+            <span className="text-[10px] text-gray-700 mt-1">
+              {userMap[exp.createdBy]?.name || "Unknown"}
+            </span>
+          </div>
 
-            <div className="text-xs text-gray-500 flex justify-between items-center">
-              <span>
-                By: {exp.email} |{" "}
-                {exp.expenseDate?.toLocaleDateString() || "No Date"}
-              </span>
-              {exp.category && (
-                <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs">
-                  {exp.category}
-                </span>
-              )}
-            </div>
-
-            {exp.sharedWithEmails?.length > 0 && (
-              <div className="text-xs text-gray-600">
-                Split with:{" "}
-                {exp.sharedWithEmails.map((email) => (
-                  <span
-                    key={email}
-                    className="inline-block bg-gray-100 px-2 py-0.5 rounded mr-1 text-xs"
-                  >
-                    {email}
+          {/* 🧍 Split With */}
+          <div className="flex flex-col items-center">
+            <span className="text-xs text-gray-500">Split With</span>
+            <div className="flex -space-x-2 mt-1">
+              {exp.sharedWith?.map((uid, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <Avatar
+                    email={userMap[uid]?.email || "?"}
+                    index={i + idx}
+                  />
+                  <span className="text-[10px] text-gray-700">
+                    {userMap[uid]?.name || "?"}
                   </span>
-                ))}
-              </div>
-            )}
-
-            {exp.note && (
-              <div className="text-xs text-gray-600 italic">Note: {exp.note}</div>
-            )}
-
-            {exp.createdBy === auth.currentUser?.uid && (
-              <div className="mt-1 text-right space-x-2">
-                <button
-                  onClick={() => handleEdit(exp)}
-                  className="text-blue-500 text-xs hover:underline"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(exp.id)}
-                  className="text-red-500 text-xs hover:underline"
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        ))
-      )}
-
-      {/* ✨ Popup Modal for Edit */}
-      {editing && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">Edit Expense</h3>
-
-            <input
-              className="w-full border p-2 mb-2 rounded"
-              value={editing.description}
-              onChange={(e) => handleEditChange("description", e.target.value)}
-              placeholder="Description"
-            />
-            <input
-              className="w-full border p-2 mb-2 rounded"
-              value={editing.amount}
-              onChange={(e) => handleEditChange("amount", e.target.value)}
-              placeholder="Amount"
-              type="number"
-            />
-            <input
-              className="w-full border p-2 mb-2 rounded"
-              value={editing.note || ""}
-              onChange={(e) => handleEditChange("note", e.target.value)}
-              placeholder="Note (optional)"
-            />
-            <input
-              className="w-full border p-2 mb-4 rounded"
-              value={editing.category || ""}
-              onChange={(e) => handleEditChange("category", e.target.value)}
-              placeholder="Category (optional)"
-            />
-
-            <div className="flex justify-end space-x-2">
-              <button
-                className="px-4 py-2 bg-gray-300 rounded"
-                onClick={() => setEditing(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 bg-green-600 text-white rounded"
-                onClick={saveEditedExpense}
-              >
-                Save
-              </button>
+                </div>
+              ))}
             </div>
           </div>
+
+          {/* 🗑️ Delete button (if owned) */}
+          {exp.createdBy === auth.currentUser.uid && (
+            <button
+              onClick={() => handleDelete(exp.id)}
+              className="text-red-500 text-sm underline hover:font-semibold"
+            >
+              Delete
+            </button>
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
-
-export default ExpenseList;

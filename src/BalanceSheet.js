@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot, doc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, getDoc, getDocs } from "firebase/firestore";
 
 function BalanceSheet({ groupId }) {
   const [expenses, setExpenses] = useState([]);
   const [members, setMembers] = useState([]);
+  const [userMap, setUserMap] = useState({});
 
+  // 🔄 Fetch expenses + members
   useEffect(() => {
     if (!groupId) return;
 
@@ -20,7 +22,8 @@ function BalanceSheet({ groupId }) {
     const fetchMembers = async () => {
       const groupSnap = await getDoc(doc(db, "groups", groupId));
       if (groupSnap.exists()) {
-        setMembers(groupSnap.data().members || []);
+        const memberUIDs = groupSnap.data().members || [];
+        setMembers(memberUIDs);
       }
     };
 
@@ -29,27 +32,47 @@ function BalanceSheet({ groupId }) {
     return () => unsubscribe();
   }, [groupId]);
 
+  // 👥 Fetch user display names
+  useEffect(() => {
+    const fetchUsers = async () => {
+      const snapshot = await getDocs(collection(db, "users"));
+      const map = {};
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        map[data.uid] = data.displayName || data.email || "Unknown";
+      });
+      setUserMap(map);
+    };
+
+    fetchUsers();
+  }, []);
+
+  // 💰 Balance calculation
   const totals = {};
   let grandTotal = 0;
 
   expenses.forEach((exp) => {
+    const amount = parseFloat(exp.amount) || 0;
     const sharedWith = exp.sharedWith || members;
-    const splitAmount = (parseFloat(exp.amount) || 0) / sharedWith.length;
+    const paidBy = exp.paidBy || exp.createdBy;
 
-    grandTotal += parseFloat(exp.amount) || 0;
+    const splitAmount = amount / sharedWith.length;
+    grandTotal += amount;
 
-    // Creditor (who paid)
-    totals[exp.createdBy] = (totals[exp.createdBy] || 0) + parseFloat(exp.amount);
+    // Credit full amount to payer
+    totals[paidBy] = (totals[paidBy] || 0) + amount;
 
-    // Debtors (sharedWith)
+    // Debit split amount from everyone in sharedWith (except payer)
     sharedWith.forEach((uid) => {
-      totals[uid] = (totals[uid] || 0) - splitAmount;
+      if (uid !== paidBy) {
+        totals[uid] = (totals[uid] || 0) - splitAmount;
+      }
     });
   });
 
   const netBalances = members.map((uid) => ({
     uid,
-    net: (totals[uid] || 0).toFixed(2),
+    net: totals[uid] || 0,
   }));
 
   const creditors = netBalances.filter((u) => u.net > 0).sort((a, b) => b.net - a.net);
@@ -76,19 +99,29 @@ function BalanceSheet({ groupId }) {
   }
 
   return (
-    <div className="mt-4 bg-blue-50 border border-blue-200 p-4 rounded text-center">
-      <h2 className="text-lg font-semibold text-blue-800 mb-2">Balance Sheet</h2>
-      <p className="text-blue-700 mb-2">Total Spent: ₹{grandTotal.toFixed(2)}</p>
+    <div className="mt-6 bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+      <h2 className="text-xl font-bold text-gray-800 mb-2">Balance Sheet</h2>
+      <p className="text-gray-600 mb-4 text-sm">
+        Total Group Spending: <span className="font-semibold text-blue-600">₹{grandTotal.toFixed(2)}</span>
+      </p>
 
       {settlements.length === 0 ? (
-        <p className="text-green-700 font-semibold">All settled up!</p>
+        <p className="text-green-700 font-medium">✅ All settled up!</p>
       ) : (
-        <div className="text-left text-sm mt-2">
+        <div className="text-sm space-y-2">
           {settlements.map((s, i) => (
-            <p key={i}>
-              <span className="font-medium">{s.from}</span> pays{" "}
-              <span className="font-medium">{s.to}</span>: ₹{s.amount}
-            </p>
+            <div key={i} className="flex items-center justify-between bg-blue-50 p-2 rounded">
+              <div>
+                <span className="font-medium text-gray-800" title={userMap[s.from]}>
+                  {userMap[s.from] || s.from}
+                </span>{" "}
+                owes{" "}
+                <span className="font-medium text-gray-800" title={userMap[s.to]}>
+                  {userMap[s.to] || s.to}
+                </span>
+              </div>
+              <span className="text-blue-600 font-semibold">₹{s.amount}</span>
+            </div>
           ))}
         </div>
       )}

@@ -1,4 +1,3 @@
-// src/components/SettlementSheet.js
 import { useEffect, useState } from "react";
 import { db } from "../firebase";
 import {
@@ -22,10 +21,11 @@ const SettlementSheet = ({ groupId }) => {
         const groupSnap = await getDoc(doc(db, "groups", groupId));
         const members = groupSnap.data().members;
 
-        const uidToEmail = {};
+        // ✅ Fetch display names instead of email
+        const uidToName = {};
         for (let uid of members) {
           const userSnap = await getDoc(doc(db, "users", uid));
-          uidToEmail[uid] = userSnap.exists() ? userSnap.data().email : uid;
+          uidToName[uid] = userSnap.exists() ? userSnap.data().displayName || userSnap.data().email || uid : uid;
         }
 
         const netMap = {};
@@ -35,10 +35,10 @@ const SettlementSheet = ({ groupId }) => {
           const sharedWith = exp.sharedWith || members;
           const split = amount / sharedWith.length;
 
-          // Creditor
-          netMap[exp.createdBy] = (netMap[exp.createdBy] || 0) + amount;
+          // Creditor (who paid)
+          netMap[exp.paidBy] = (netMap[exp.paidBy] || 0) + amount;
 
-          // Debtors
+          // Debtors (who shared the expense)
           sharedWith.forEach((uid) => {
             netMap[uid] = (netMap[uid] || 0) - split;
           });
@@ -49,8 +49,12 @@ const SettlementSheet = ({ groupId }) => {
           balance: parseFloat(netMap[uid] || 0),
         }));
 
-        const creditors = balances.filter(b => b.balance > 0).sort((a, b) => b.balance - a.balance);
-        const debtors = balances.filter(b => b.balance < 0).sort((a, b) => a.balance - b.balance);
+        const creditors = balances
+          .filter((b) => b.balance > 0)
+          .sort((a, b) => b.balance - a.balance);
+        const debtors = balances
+          .filter((b) => b.balance < 0)
+          .sort((a, b) => a.balance - b.balance);
 
         const result = [];
         let i = 0, j = 0;
@@ -58,12 +62,15 @@ const SettlementSheet = ({ groupId }) => {
         while (i < debtors.length && j < creditors.length) {
           const debtor = debtors[i];
           const creditor = creditors[j];
-          const amount = Math.min(Math.abs(debtor.balance), Math.abs(creditor.balance));
+          const amount = Math.min(
+            Math.abs(debtor.balance),
+            Math.abs(creditor.balance)
+          );
 
           if (amount > 0) {
             result.push({
-              from: uidToEmail[debtor.uid],
-              to: uidToEmail[creditor.uid],
+              from: uidToName[debtor.uid],
+              to: uidToName[creditor.uid],
               amount: amount.toFixed(2),
             });
 
@@ -84,7 +91,9 @@ const SettlementSheet = ({ groupId }) => {
 
   return (
     <div className="mt-4 bg-green-50 p-4 rounded shadow text-center">
-      <h2 className="text-lg font-semibold text-green-800 mb-3">Settlement Sheet</h2>
+      <h2 className="text-lg font-semibold text-green-800 mb-3">
+        Settlement Sheet
+      </h2>
       {settlements.length === 0 ? (
         <p className="text-gray-600">All settled up! 🎉</p>
       ) : (

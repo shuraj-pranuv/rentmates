@@ -20,6 +20,16 @@ import InviteMember from "./components/InviteMember";
 // Route Protection
 import ProtectedRoute from "./components/ProtectedRoute";
 
+// Icons
+import {
+  LogOut,
+  Users,
+  Plus,
+  List,
+  BarChart2,
+  UserCircle,
+} from "lucide-react";
+
 function App() {
   const [user, setUser] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
@@ -38,74 +48,86 @@ function App() {
   };
 
   return (
-    <main className="min-h-screen py-10 px-4 bg-gradient-to-br from-blue-50 via-purple-100 to-white">
-      <div className="max-w-6xl mx-auto bg-white text-gray-900 shadow-xl rounded-3xl p-6 sm:p-10 border border-gray-100">
-        <h1 className="text-4xl sm:text-5xl font-bold text-center text-indigo-700 mb-8">
+    <main className="min-h-screen py-6 px-2 sm:px-4 bg-gradient-to-br from-blue-50 via-purple-100 to-white">
+      <div className="max-w-7xl mx-auto bg-white text-gray-900 shadow-xl rounded-3xl p-4 sm:p-6 border border-gray-100">
+        <h1 className="text-3xl sm:text-4xl font-bold text-center text-indigo-700 mb-6">
           RentMates
         </h1>
 
         {user ? (
           <ProtectedRoute>
-            <>
-              {/* 🔐 User Info + Logout */}
-              <div className="text-center text-gray-600 mb-4">
-                Welcome, <span className="font-semibold">{user.email}</span>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="block mx-auto mb-8 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-full shadow-sm transition"
-              >
-                Log Out
-              </button>
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* 🧭 Sidebar */}
+              <aside className="w-full md:w-1/4 bg-gray-50 rounded-xl shadow-md p-4 space-y-6 h-fit">
+                {/* User Info */}
+                <div className="flex items-center gap-2 text-gray-700">
+                  <UserCircle className="w-6 h-6 text-indigo-600" />
+                  <span className="text-sm font-medium">{user.email}</span>
+                </div>
 
-              {/* 🌐 Sidebar Layout */}
-              <div className="flex flex-col md:flex-row gap-6">
-                {/* 🧭 Sidebar */}
-                <div className="w-full md:w-1/4 bg-gray-50 p-4 sm:p-6 rounded-xl shadow-md h-fit">
+                {/* Group Section */}
+                <div>
                   <CreateGroup />
-                  <hr className="my-4 border-gray-300" />
+                  <hr className="my-3 border-gray-300" />
                   <GroupList onSelectGroup={setSelectedGroupId} />
                 </div>
 
-                {/* 📦 Main Content */}
-                <div className="flex-1 space-y-6">
-                  {selectedGroupId ? (
-                    <>
-                      {/* ➕ Add Expense + Invite */}
-                      <div className="p-4 sm:p-6 bg-gray-50 rounded-xl shadow-md space-y-6">
-                        <h2 className="text-xl font-semibold text-indigo-600 mb-3">
-                          Add Expense
-                        </h2>
-                        <AddExpense groupId={selectedGroupId} />
-                        <InviteMember groupId={selectedGroupId} />
-                      </div>
+                {/* Logout */}
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 text-white bg-red-500 hover:bg-red-600 font-semibold py-2 px-4 rounded-full w-full justify-center transition"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Log Out
+                </button>
+              </aside>
 
-                      {/* 📋 Expense List */}
-                      <div className="p-4 sm:p-6 bg-gray-50 rounded-xl shadow-md">
-                        <h2 className="text-xl font-semibold text-indigo-600 mb-3">
-                          Your Expenses
-                        </h2>
-                        <ExpenseList groupId={selectedGroupId} />
-                      </div>
-
-                      {/* 📊 Balance & Settlement */}
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="p-4 sm:p-6 bg-blue-50 rounded-xl shadow text-center">
-                          <BalanceSheet groupId={selectedGroupId} />
-                        </div>
-                        <div className="p-4 sm:p-6 bg-green-50 rounded-xl shadow text-center">
-                          <SettlementSheet groupId={selectedGroupId} />
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center text-gray-500 font-medium text-lg">
-                      Select a group to manage expenses.
+              {/* 📦 Main Content */}
+              <section className="flex-1 space-y-6">
+                {selectedGroupId ? (
+                  <>
+                    {/* ➕ Add Expense & Invite */}
+                    <div className="p-4 sm:p-6 bg-gray-50 rounded-xl shadow space-y-6">
+                      <h2 className="text-xl font-semibold text-indigo-600 flex items-center gap-2">
+                        <Plus className="w-5 h-5" /> Add Expense
+                      </h2>
+                      <AddExpense groupId={selectedGroupId} />
+                      <InviteMember groupId={selectedGroupId} />
                     </div>
-                  )}
-                </div>
-              </div>
-            </>
+
+                    {/* 📋 Expense List */}
+                    <div className="p-4 sm:p-6 bg-gray-50 rounded-xl shadow">
+                      <h2 className="text-xl font-semibold text-indigo-600 flex items-center gap-2 mb-3">
+                        <List className="w-5 h-5" /> Your Expenses
+                      </h2>
+                      <ExpenseList groupId={selectedGroupId} />
+                    </div>
+
+                    {/* 📊 Balance & Settlement */}
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="p-4 sm:p-6 bg-blue-50 rounded-xl shadow text-center">
+                        <h3 className="font-semibold text-blue-800 mb-2">
+                          <BarChart2 className="inline w-5 h-5 mr-1" />
+                          Balance Sheet
+                        </h3>
+                        <BalanceSheet groupId={selectedGroupId} />
+                      </div>
+                      <div className="p-4 sm:p-6 bg-green-50 rounded-xl shadow text-center">
+                        <h3 className="font-semibold text-green-800 mb-2">
+                          <Users className="inline w-5 h-5 mr-1" />
+                          Settlement Sheet
+                        </h3>
+                        <SettlementSheet groupId={selectedGroupId} />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center text-gray-500 font-medium text-lg mt-10">
+                    Select a group to manage expenses.
+                  </div>
+                )}
+              </section>
+            </div>
           </ProtectedRoute>
         ) : (
           <>

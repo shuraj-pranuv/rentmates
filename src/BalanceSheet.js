@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot, doc, getDoc, getDocs } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  doc,
+  getDoc,
+  getDocs,
+} from "firebase/firestore";
 
 function BalanceSheet({ groupId }) {
   const [expenses, setExpenses] = useState([]);
@@ -53,8 +59,10 @@ function BalanceSheet({ groupId }) {
 
   expenses.forEach((exp) => {
     const amount = parseFloat(exp.amount) || 0;
-    const sharedWith = exp.sharedWith || members;
+    const sharedWith = exp.sharedWith && exp.sharedWith.length > 0 ? exp.sharedWith : members;
     const paidBy = exp.paidBy || exp.createdBy;
+
+    if (sharedWith.length === 0) return; // prevent division by zero
 
     const splitAmount = amount / sharedWith.length;
     grandTotal += amount;
@@ -62,21 +70,28 @@ function BalanceSheet({ groupId }) {
     // Credit full amount to payer
     totals[paidBy] = (totals[paidBy] || 0) + amount;
 
-    // Debit split amount from everyone in sharedWith (except payer)
+    // Debit split from sharedWith members
     sharedWith.forEach((uid) => {
-      if (uid !== paidBy) {
-        totals[uid] = (totals[uid] || 0) - splitAmount;
-      }
+      totals[uid] = (totals[uid] || 0) - splitAmount;
     });
+
+    // Re-credit payer their share if they are part of sharedWith
+    if (sharedWith.includes(paidBy)) {
+      totals[paidBy] += splitAmount;
+    }
   });
 
   const netBalances = members.map((uid) => ({
     uid,
-    net: totals[uid] || 0,
+    net: parseFloat((totals[uid] || 0).toFixed(2)),
   }));
 
-  const creditors = netBalances.filter((u) => u.net > 0).sort((a, b) => b.net - a.net);
-  const debtors = netBalances.filter((u) => u.net < 0).sort((a, b) => a.net - b.net);
+  const creditors = netBalances
+    .filter((u) => u.net > 0.01)
+    .sort((a, b) => b.net - a.net);
+  const debtors = netBalances
+    .filter((u) => u.net < -0.01)
+    .sort((a, b) => a.net - b.net);
 
   const settlements = [];
 
@@ -102,7 +117,10 @@ function BalanceSheet({ groupId }) {
     <div className="mt-6 bg-white p-6 rounded-lg shadow-lg border border-gray-200">
       <h2 className="text-xl font-bold text-gray-800 mb-2">Balance Sheet</h2>
       <p className="text-gray-600 mb-4 text-sm">
-        Total Group Spending: <span className="font-semibold text-blue-600">₹{grandTotal.toFixed(2)}</span>
+        Total Group Spending:{" "}
+        <span className="font-semibold text-blue-600">
+          ₹{grandTotal.toFixed(2)}
+        </span>
       </p>
 
       {settlements.length === 0 ? (
@@ -110,17 +128,28 @@ function BalanceSheet({ groupId }) {
       ) : (
         <div className="text-sm space-y-2">
           {settlements.map((s, i) => (
-            <div key={i} className="flex items-center justify-between bg-blue-50 p-2 rounded">
+            <div
+              key={i}
+              className="flex items-center justify-between bg-blue-50 p-2 rounded"
+            >
               <div>
-                <span className="font-medium text-gray-800" title={userMap[s.from]}>
-                  {userMap[s.from] || s.from}
+                <span
+                  className="font-medium text-gray-800"
+                  title={userMap[s.from]}
+                >
+                  {userMap[s.from] || "Unknown"}
                 </span>{" "}
                 owes{" "}
-                <span className="font-medium text-gray-800" title={userMap[s.to]}>
-                  {userMap[s.to] || s.to}
+                <span
+                  className="font-medium text-gray-800"
+                  title={userMap[s.to]}
+                >
+                  {userMap[s.to] || "Unknown"}
                 </span>
               </div>
-              <span className="text-blue-600 font-semibold">₹{s.amount}</span>
+              <span className="text-blue-600 font-semibold">
+                ₹{s.amount}
+              </span>
             </div>
           ))}
         </div>

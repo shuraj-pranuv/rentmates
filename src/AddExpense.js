@@ -10,6 +10,8 @@ import {
 } from "firebase/firestore";
 import Avatar from "./components/Avatar";
 
+const CATEGORY_OPTIONS = ["Rent", "Food", "Utilities", "Groceries", "Internet", "Others"];
+
 function AddExpense({ groupId }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -17,6 +19,7 @@ function AddExpense({ groupId }) {
   const [paidBy, setPaidBy] = useState(auth.currentUser.uid);
   const [members, setMembers] = useState([]);
   const [sharedWith, setSharedWith] = useState([]);
+  const [category, setCategory] = useState("");
 
   useEffect(() => {
     if (!groupId) return;
@@ -49,7 +52,10 @@ function AddExpense({ groupId }) {
   };
 
   const handleAddExpense = async () => {
-    if (!description || !amount || !groupId || !paidBy || sharedWith.length === 0) return;
+    if (!description || !amount || !groupId || !paidBy || sharedWith.length === 0 || !category) {
+      alert("Please fill in all fields");
+      return;
+    }
 
     try {
       const expenseData = {
@@ -58,6 +64,7 @@ function AddExpense({ groupId }) {
         createdAt: serverTimestamp(),
         createdBy: paidBy,
         sharedWith,
+        category,
       };
 
       if (date) {
@@ -66,10 +73,12 @@ function AddExpense({ groupId }) {
 
       await addDoc(collection(db, "groups", groupId, "expenses"), expenseData);
 
+      // Reset
       setDescription("");
       setAmount("");
       setDate("");
       setPaidBy(auth.currentUser.uid);
+      setCategory("");
       setSharedWith(members.map(m => m.uid));
     } catch (error) {
       console.error("Error adding expense:", error);
@@ -78,29 +87,45 @@ function AddExpense({ groupId }) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 p-4 rounded border bg-white shadow-sm">
       <input
         type="text"
-        placeholder="Description"
+        placeholder="Expense description"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        className="w-full px-3 py-2 border rounded"
+        className="w-full px-3 py-2 border rounded text-sm"
       />
       <input
         type="number"
-        placeholder="Amount"
+        placeholder="Amount (₹)"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        className="w-full px-3 py-2 border rounded"
+        className="w-full px-3 py-2 border rounded text-sm"
       />
       <input
         type="date"
         value={date}
         onChange={(e) => setDate(e.target.value)}
-        className="w-full px-3 py-2 border rounded"
+        className="w-full px-3 py-2 border rounded text-sm"
       />
 
-      {/* 🆕 Who paid dropdown */}
+      {/* 🆕 Category Dropdown */}
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        className="w-full px-3 py-2 border rounded text-sm"
+      >
+        <option disabled value="">
+          Select category
+        </option>
+        {CATEGORY_OPTIONS.map((cat) => (
+          <option key={cat} value={cat}>
+            {cat}
+          </option>
+        ))}
+      </select>
+
+      {/* 🆕 Who Paid */}
       <select
         value={paidBy}
         onChange={(e) => setPaidBy(e.target.value)}
@@ -139,9 +164,9 @@ function AddExpense({ groupId }) {
 
       <button
         onClick={handleAddExpense}
-        className="w-full bg-green-500 text-white py-2 rounded hover:bg-green-600"
+        className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition"
       >
-        Add Expense
+        ➕ Add Expense
       </button>
     </div>
   );
